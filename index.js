@@ -76,35 +76,37 @@ app.get("/client", async function(req,res){
     }
 });
 
-app.get("/doctor/:dname", function(req,res){
+app.get("/doctor", function(req,res){
+    const {requester} = req.query
+    //Hardcoded name because there is no time left to implement it correctly
     NameModel.find(
-        {therapist:req.params.dname}
+        {therapist:"Ardyce Giorgione"}
     )
         .exec()
-        .then(async (data) => {
-            data = await Promise.all(data.map(async value => {
-                let response = Object.assign({}, value._doc);
-                const client = await contract.getClientAddress(response.id)
+        .then(async (table) => {
+            const response = await Promise.all(table.map(async row => {
+                let row_copy = Object.assign({}, row._doc);
+                const client = await contract.getClientAddress(row_copy.id)
                     .catch(err => ethers.constants.AddressZero);
                 if(client !== ethers.constants.AddressZero) {
-                    response['registered'] = true;
-                    const response = await contract.getClientPermission(
-                        req.body.requester, client
+                    row_copy['registered'] = true;
+                    const contract_response = await contract.getClientPermission(
+                        requester, client, {gasLimit: 100000}
                     ).then(response => response.wait());
-                    const permission = response.events[0].args.permission;
+                    const permission = contract_response.events[0].args.permission;
                     if(!permission) {
-                        response['addiction'] = "";
-                        response['permission'] = false;
+                        row_copy['addiction'] = "";
+                        row_copy['permission'] = false;
                     } else {
-                        response['permission'] = true;
+                        row_copy['permission'] = true;
                     }
                 } else {
-                    response['registered'] = false;
-                    response['permission'] = true;
+                    row_copy['registered'] = false;
+                    row_copy['permission'] = true;
                 }
-                return response;
+                return row_copy;
             }));
-            res.json(data);
+            res.json(response);
         })
         .catch(err => {
             res.status(500).json({message: err.message});
