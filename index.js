@@ -52,10 +52,8 @@ app.get("/client/:id", function(req,res){
         .exec()
         .then(async (data) => {
             let response = Object.assign({}, data._doc);
-            let id = 0;
-            await contract.getClientId(req.body.client ?? ethers.constants.AddressZero)
-                .then(result => id = result)
-                .catch(() => {});
+            const id = await contract.getClientId(req.body.client ?? ethers.constants.AddressZero)
+                .catch(() => 0);
             if(id !== 0) {
                 response['registered'] = true;
                 const response = await contract.getClientPermission(
@@ -87,7 +85,8 @@ app.get("/doctor/:dname", function(req,res){
         .then(async (data) => {
             data = await Promise.all(data.map(async value => {
                 let response = Object.assign({}, value._doc);
-                const client = await contract.getClientAddress(response.id).catch(err => ethers.constants.AddressZero);
+                const client = await contract.getClientAddress(response.id)
+                    .catch(err => ethers.constants.AddressZero);
                 if(client !== ethers.constants.AddressZero) {
                     response['registered'] = true;
                     const response = await contract.getClientPermission(
