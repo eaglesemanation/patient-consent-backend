@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors');
 const mongoose = require('mongoose');
 const ethers = require('ethers');
 const abi = require('patient-consent-contract/artifacts/contracts/PatientConsent.sol/PatientConsent.json');
@@ -29,6 +30,7 @@ if(process.env.CONTRACT_ADDRESS && process.env.MNEMONIC) {
 }
 
 app.use(express.json());
+app.use(cors());
 
 const PatientSchema = new mongoose.Schema({
     "password": String,
@@ -44,37 +46,34 @@ const PatientSchema = new mongoose.Schema({
 
 var NameModel = mongoose.model("patients", PatientSchema);
 
-app.get("/client/:id", function(req,res){
-    const id = req.params.id;
-    NameModel.findOne(
-        {id: +id}
-    )
-        .exec()
-        .then(async (data) => {
-            let response = Object.assign({}, data._doc);
-            const id = await contract.getClientId(req.body.client ?? ethers.constants.AddressZero)
-                .catch(() => 0);
-            if(id !== 0) {
-                response['registered'] = true;
-                const response = await contract.getClientPermission(
-                    req.body.requester, req.body.client
+app.get("/client", async function(req,res){
+    const {requester, client} = req.query;
+    const id = await contract.getClientId(client ?? ethers.constants.AddressZero);
+    if(id !== 0) {
+        NameModel.findOne(
+            {id: id}
+        )
+            .exec()
+            .then(async (data) => {
+                let response = Object.assign({}, data._doc);
+                const request = await contract.getClientPermission(
+                    requester, client, {gasLimit: 100000}
                 ).then(response => response.wait());
-                const permission = response.events[0].args.permission;
+                const permission = request.events[0].args.permission;
                 if(!permission) {
                     response['addiction'] = "";
                     response['permission'] = false;
                 } else {
                     response['permission'] = true;
                 }
-            } else {
-                response['registered'] = false;
-                response['permission'] = true;
-            }
-            res.json(response);
-        })
-        .catch(err => {
-            res.status(500).json({message: err.message});
-        });
+                res.json(response);
+            })
+            .catch(err => {
+                res.status(500).json({message: err.message});
+            });
+    } else {
+        res.status(500).json({message: "This address is not registered yet"});
+    }
 });
 
 app.get("/doctor/:dname", function(req,res){
